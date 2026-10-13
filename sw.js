@@ -1,5 +1,5 @@
 // Офлайн-режим: файлы приложения кэшируются. При изменении файлов — поднять версию.
-const VERSION = 'doah-v0.3.0';
+const VERSION = 'doah-v0.3.1';
 const FILES = [
   './',
   'index.html',

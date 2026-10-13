@@ -534,14 +534,16 @@ function calcNorm(pf, weight) {
   const bmr = 10 * weight + 6.25 * pf.height - 5 * pf.age + (pf.sex === 'f' ? -161 : 5);
   const tdee = bmr * ACT_K[pf.act ?? 1];
   const losing = pf.goal && pf.goal < weight - 0.2;
-  const deficit = losing ? (pf.pace || 0.5) * 7700 / 7 : 0;
-  const floor = Math.max(bmr, pf.sex === 'f' ? 1200 : 1500);
+  const wanted = losing ? (pf.pace || 0.5) * 7700 / 7 : 0;
+  // Защита: срезать не больше 25% расхода и не есть меньше 1500 (м) / 1200 (ж)
+  const deficit = Math.min(wanted, tdee * 0.25);
+  const floor = pf.sex === 'f' ? 1200 : 1500;
   const target = Math.round(Math.max(floor, tdee - deficit) / 10) * 10;
   const realDeficit = tdee - target;
   const protein = Math.round((pf.goal && losing ? Math.max(pf.goal, weight * 0.9) : weight) * 1.8);
   let weeks = null;
   if (losing && realDeficit > 50) weeks = Math.ceil((weight - pf.goal) * 7700 / (realDeficit * 7));
-  return { bmr: Math.round(bmr), tdee: Math.round(tdee), target, protein, weeks, losing, clamped: target > tdee - deficit + 5 };
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), target, protein, weeks, losing, clamped: target > tdee - wanted + 5 };
 }
 
 function normText(n) {
@@ -552,7 +554,7 @@ function normText(n) {
     const end = new Date(); end.setDate(end.getDate() + n.weeks * 7);
     s += ` Цель примерно к ${fmtDM.format(end).replace('.', '')} ${end.getFullYear()} (${n.weeks} ${plural(n.weeks, 'неделя', 'недели', 'недель')}).`;
   } else if (!n.losing) s += ' Цель — держать вес.';
-  if (n.clamped) s += ' Темп урезан: ниже этой нормы есть опасно, будет срываться.';
+  if (n.clamped) s += ' Быстрее не даю: срезать больше 25% расхода — уйдут мышцы и начнутся срывы. Ускорить можно движением: больше тренировок или шагов.';
   return s + '</div>';
 }
 
@@ -698,6 +700,10 @@ function openProfile() {
 function updateProfileCalc() {
   const f = readProfileForm();
   $('#pfResult').innerHTML = normText(calcNorm(f, f.weight));
+  // Сколько реально тренируется по записям за 4 недели
+  let n = 0;
+  for (let i = 0; i < 28; i++) { const x = days.get(addDays(todayKey(), -i)); if (x && x.workout && x.workout.length) n++; }
+  $('#pfActHint').textContent = n ? `По твоим записям: ~${num(n / 4)} в неделю за последний месяц` : '';
 }
 
 async function saveProfile() {

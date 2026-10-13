@@ -358,3 +358,4 @@ mark { background: color-mix(in srgb, var(--note) 40%, transparent); color: inhe
 .calc { background: var(--surface-2); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; font-size: 14px; min-height: 20px; }
 .calc b { font-size: 20px; }
 .calc .muted { font-size: 13px; }
+.form-row small { display: block; margin-top: 5px; font-size: 12px; }
