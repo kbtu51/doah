@@ -108,6 +108,27 @@
       <div id="feed"></div>
     </section>
 
+    <!-- ПИТАНИЕ -->
+    <section class="view" id="view-food" hidden>
+      <div class="daynav">
+        <button class="icon-btn" id="prevFDay" aria-label="Предыдущий день"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <div class="daynav-title"><div id="fDayTitle"></div><div class="muted small" id="fDaySub"></div></div>
+        <button class="icon-btn" id="nextFDay" aria-label="Следующий день"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <div id="foodSummary"></div>
+
+      <h3 class="section-title">Съел</h3>
+      <div id="mealList"></div>
+
+      <div class="section-row"><h3 class="section-title">Мои блюда</h3><button class="link" id="editMyFoods">Изменить</button></div>
+      <div class="chips" id="myFoods"></div>
+
+      <h3 class="section-title">Что приготовить</h3>
+      <div class="chips cats" id="dishCats"></div>
+      <label class="fit-toggle"><input type="checkbox" id="fitOnly" checked> Только то, что влезает в остаток</label>
+      <div id="dishList"></div>
+    </section>
+
     <!-- ТРЕНИРОВКИ -->
     <section class="view" id="view-workouts" hidden>
       <div class="daynav">
@@ -131,6 +152,10 @@
       <svg viewBox="0 0 24 24"><path d="M5 4a2 2 0 0 1 2-2h12v18H7a2 2 0 0 0-2 2V4Z"/><path d="M5 20a2 2 0 0 1 2-2h12M9 7h6M9 11h4"/></svg>
       <span>Дневник</span>
     </button>
+    <button data-view="food">
+      <svg viewBox="0 0 24 24"><path d="M7 2v20M4 2v6a3 3 0 0 0 6 0V2M17 22V2c-2.5 1.5-4 4-4 8h4"/></svg>
+      <span>Питание</span>
+    </button>
     <button data-view="timeline">
       <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-7"/></svg>
       <span>Хронология</span>
@@ -149,7 +174,38 @@
       <button type="button" class="btn primary" id="exportBtn">Сохранить копию</button>
       <label class="btn">Восстановить из копии<input type="file" id="importFile" accept="application/json,.json" hidden></label>
       <p class="muted small" id="persistInfo"></p>
-      <p class="muted small">DOAH — Diary of a Health · v0.2</p>
+      <p class="muted small">DOAH — Diary of a Health · v0.3</p>
+    </form>
+  </dialog>
+
+  <dialog id="profileDlg">
+    <form method="dialog" class="sheet" id="profileForm">
+      <div class="card-head"><h2>Моя норма</h2><button class="icon-btn" value="close" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="form-row"><span>Пол</span><div class="segmented two" id="pfSex"><button type="button" data-v="m" class="on">Мужской</button><button type="button" data-v="f">Женский</button></div></div>
+      <div class="form-grid">
+        <label>Возраст<input type="number" inputmode="numeric" id="pfAge" min="14" max="90" placeholder="30"></label>
+        <label>Рост, см<input type="number" inputmode="numeric" id="pfHeight" min="120" max="230" placeholder="178"></label>
+        <label>Вес сейчас, кг<input type="text" inputmode="decimal" id="pfWeight" placeholder="85"></label>
+        <label>Цель, кг<input type="text" inputmode="decimal" id="pfGoal" placeholder="78"></label>
+      </div>
+      <div class="form-row"><span>Тренировок в неделю</span><div class="segmented" id="pfAct"><button type="button" data-v="0">0</button><button type="button" data-v="1" class="on">1–2</button><button type="button" data-v="2">3–4</button><button type="button" data-v="3">5+</button></div></div>
+      <div class="form-row"><span>Темп</span><div class="segmented three" id="pfPace"><button type="button" data-v="0.25">Мягко</button><button type="button" data-v="0.5" class="on">Норм</button><button type="button" data-v="0.75">Жёстко</button></div></div>
+      <div class="calc" id="pfResult"></div>
+      <button type="button" class="btn primary" id="pfSave">Сохранить</button>
+    </form>
+  </dialog>
+
+  <dialog id="mealDlg">
+    <form method="dialog" class="sheet" id="mealForm">
+      <div class="card-head"><h2 id="mealDlgTitle">Добавить блюдо</h2><button class="icon-btn" value="close" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="form-grid">
+        <label class="wide">Что съел<input type="text" id="mName" placeholder="Гречка с курицей" maxlength="60"></label>
+        <label>Калории<input type="number" inputmode="numeric" id="mKcal" min="0" max="5000" placeholder="450"></label>
+        <label>Белок, г<input type="number" inputmode="numeric" id="mProt" min="0" max="300" placeholder="30"></label>
+      </div>
+      <label class="fit-toggle" id="mRememberRow"><input type="checkbox" id="mRemember" checked> Запомнить в «Мои блюда»</label>
+      <p class="muted small">Не знаешь калории — глянь на упаковке или спроси Claude по фото.</p>
+      <button type="button" class="btn primary" id="mSave">Добавить</button>
     </form>
   </dialog>
 
@@ -163,6 +219,7 @@
 
   <div class="toast" id="toast" role="status"></div>
 
+  <script src="foods.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -177,6 +177,11 @@ const state = {
   calSel: null,
   dMonth: todayKey().slice(0, 7),
   query: '',
+  profile: null,     // норма питания
+  myFoods: [],       // «Мои блюда»
+  dishCat: 'main',
+  openDish: null,
+  editFoods: false,
   lastExport: null,
 };
 
@@ -189,7 +194,7 @@ function getDay(date) {
 
 function isEmpty(d) {
   return d.sleep == null && d.food == null && d.weight == null && d.sys == null && d.dia == null
-    && !(d.workout && d.workout.length) && !d.rest && !(d.note && d.note.trim()) && !(d.photos && d.photos.length);
+    && !(d.workout && d.workout.length) && !d.rest && !(d.note && d.note.trim()) && !(d.photos && d.photos.length) && !(d.meals && d.meals.length);
 }
 
 let persistAsked = false;
@@ -270,7 +275,8 @@ function renderToday() {
     b.classList.toggle('on', d.food === v);
     b.classList.toggle('in', d.food != null && v < d.food);
   });
-  $('#foodHint').textContent = d.food ? FOOD_WORDS[d.food] : 'насколько чисто ел';
+  const kc = dayKcal(d);
+  $('#foodHint').textContent = [d.food ? FOOD_WORDS[d.food] : (kc ? '' : 'насколько чисто ел'), kc ? `${kc} ккал` : ''].filter(Boolean).join(' · ');
 
   // Тренировка
   const wc = $('#workoutChips');
@@ -508,6 +514,241 @@ function renderDiary() {
   fillThumbs($('#memory'));
 }
 
+/* ================= Питание ================= */
+
+const ACT_K = [1.2, 1.375, 1.55, 1.725]; // 0, 1–2, 3–4, 5+ тренировок в неделю
+const dayKcal = d => (d.meals || []).reduce((a, m) => a + (m.k || 0), 0);
+const dayProt = d => (d.meals || []).reduce((a, m) => a + (m.p || 0), 0);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function currentWeight(beforeOrOn) {
+  const d = days.get(beforeOrOn);
+  if (d && d.weight != null) return d.weight;
+  const last = lastBefore('weight', beforeOrOn);
+  return last ? last.weight : (state.profile && state.profile.weight) || null;
+}
+
+/** Норма по формуле Миффлина — Сан Жеора с дефицитом под темп */
+function calcNorm(pf, weight) {
+  if (!pf || !pf.age || !pf.height || !weight) return null;
+  const bmr = 10 * weight + 6.25 * pf.height - 5 * pf.age + (pf.sex === 'f' ? -161 : 5);
+  const tdee = bmr * ACT_K[pf.act ?? 1];
+  const losing = pf.goal && pf.goal < weight - 0.2;
+  const deficit = losing ? (pf.pace || 0.5) * 7700 / 7 : 0;
+  const floor = Math.max(bmr, pf.sex === 'f' ? 1200 : 1500);
+  const target = Math.round(Math.max(floor, tdee - deficit) / 10) * 10;
+  const realDeficit = tdee - target;
+  const protein = Math.round((pf.goal && losing ? Math.max(pf.goal, weight * 0.9) : weight) * 1.8);
+  let weeks = null;
+  if (losing && realDeficit > 50) weeks = Math.ceil((weight - pf.goal) * 7700 / (realDeficit * 7));
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), target, protein, weeks, losing, clamped: target > tdee - deficit + 5 };
+}
+
+function normText(n) {
+  if (!n) return '<span class="muted">Заполни возраст, рост и вес — посчитаю норму.</span>';
+  let s = `Норма: <b>${n.target}</b> ккал в день, белок <b>${n.protein}</b> г`;
+  s += `<div class="muted">Расход без диеты ≈ ${n.tdee} ккал.`;
+  if (n.weeks) {
+    const end = new Date(); end.setDate(end.getDate() + n.weeks * 7);
+    s += ` Цель примерно к ${fmtDM.format(end).replace('.', '')} ${end.getFullYear()} (${n.weeks} ${plural(n.weeks, 'неделя', 'недели', 'недель')}).`;
+  } else if (!n.losing) s += ' Цель — держать вес.';
+  if (n.clamped) s += ' Темп урезан: ниже этой нормы есть опасно, будет срываться.';
+  return s + '</div>';
+}
+
+function renderFood() {
+  const today = todayKey();
+  const d = getDay(state.date);
+  $('#fDayTitle').textContent = dayTitle(state.date);
+  $('#fDaySub').textContent = cap(fmtLong.format(parseKey(state.date)));
+  $('#nextFDay').style.visibility = state.date >= today ? 'hidden' : 'visible';
+
+  // Сводка
+  const norm = calcNorm(state.profile, currentWeight(state.date));
+  const kc = dayKcal(d), pr = dayProt(d);
+  const sum = $('#foodSummary');
+  if (!norm) {
+    sum.innerHTML = `<div class="setup-card"><p><b>Посчитаем норму</b><br><span class="muted small">Возраст, рост, вес и цель — 20 секунд. Без этого можно просто записывать еду.</span></p><button class="btn primary" id="openProfile2">Настроить</button></div>`
+      + (kc ? `<div class="fsum" style="margin-top:10px"><div class="left">Съедено</div><div class="big">${kc} <small>ккал · белок ${pr} г</small></div></div>` : '');
+    $('#openProfile2').onclick = openProfile;
+  } else {
+    const left = norm.target - kc;
+    const pct = Math.min(100, kc / norm.target * 100);
+    const ppct = Math.min(100, pr / norm.protein * 100);
+    sum.innerHTML = `<div class="fsum">
+      <div class="left">${left >= 0 ? 'Осталось' : 'Перебор'}</div>
+      <div class="big ${left < 0 ? 'over' : ''}">${Math.abs(left)} <small>ккал</small></div>
+      <div class="meter" style="--mc:${left < 0 ? 'var(--bp)' : 'var(--food)'}"><div class="lbl"><span>Калории</span><span>${kc} / ${norm.target}</span></div><div class="track"><span style="width:${pct}%"></span></div></div>
+      <div class="meter" style="--mc:var(--weight)"><div class="lbl"><span>Белок</span><span>${pr} / ${norm.protein} г</span></div><div class="track"><span style="width:${ppct}%"></span></div></div>
+      <div class="foot"><span>${weekLine(norm)}</span><button class="link" id="openProfile2">Норма</button></div></div>`;
+    $('#openProfile2').onclick = openProfile;
+  }
+
+  // Съел
+  const ml = $('#mealList');
+  const meals = d.meals || [];
+  ml.innerHTML = meals.length ? meals.map(m => `<div class="meal"><div class="mn"><div>${esc(m.n)}</div><small>${m.p ? `белок ${m.p} г` : ''}</small></div><div class="mk">${m.k} ккал</div><button class="x" data-del="${m.id}" aria-label="Убрать">×</button></div>`).join('')
+    : '<p class="empty-note">Пока пусто. Тапни блюдо ниже или добавь своё.</p>';
+
+  // Мои блюда
+  const mf = $('#myFoods');
+  mf.classList.toggle('editing', state.editFoods);
+  $('#editMyFoods').textContent = state.editFoods ? 'Готово' : 'Изменить';
+  $('#editMyFoods').hidden = !state.myFoods.length;
+  const sorted = state.myFoods.slice().sort((a, b) => (b.uses || 0) - (a.uses || 0));
+  mf.innerHTML = sorted.map(f => `<button class="chip" data-my="${f.id}">${esc(f.n)} <small>${f.k}</small></button>`).join('')
+    + (state.editFoods ? '' : '<button class="chip add" id="addMeal">+ Своё блюдо</button>');
+
+  // Подборка
+  const cats = $('#dishCats');
+  cats.innerHTML = FOOD_CATS.map(c => `<button class="chip ${c.id === state.dishCat ? 'on' : ''}" data-cat="${c.id}">${c.name}</button>`).join('');
+  const fit = $('#fitOnly').checked && norm;
+  const left = norm ? norm.target - kc : Infinity;
+  let list = FOOD_BASE.filter(x => x.c === state.dishCat);
+  const hidden = fit ? list.filter(x => x.k > left).length : 0;
+  if (fit) list = list.filter(x => x.k <= left);
+  list.sort((a, b) => (b.p / b.k) - (a.p / a.k)); // сначала самые белковые на калорию
+  $('#dishList').innerHTML = list.map(x => `<div class="dish">
+      <button data-dish="${x.id}"><div class="dn">${x.n}<small>${x.w}</small></div><div class="dk">${x.k}<small>белок ${x.p} г</small></div></button>
+      ${state.openDish === x.id ? `<div class="more">${x.r ? `<p>${x.r}</p>` : ''}<div class="acts"><button class="btn primary" data-eat="${x.id}">Съел</button><button class="btn" data-keep="${x.id}">В мои блюда</button></div></div>` : ''}
+    </div>`).join('')
+    + (!list.length ? `<p class="empty-note">${hidden ? 'В остаток ничего из этого не влезает. Сними галочку, чтобы увидеть всё.' : 'Пусто.'}</p>` : '')
+    + (list.length && hidden ? `<p class="empty-note">Ещё ${hidden} не влезают в остаток.</p>` : '');
+}
+
+function weekLine(norm) {
+  // Средний перебор/недобор за 7 дней по дням, где есть записи еды
+  const arr = [];
+  for (let i = 0; i < 7; i++) { const x = days.get(addDays(state.date, -i)); if (x && x.meals && x.meals.length) arr.push(dayKcal(x)); }
+  if (arr.length < 2) return norm.weeks ? `до цели ≈ ${norm.weeks} ${plural(norm.weeks, 'неделя', 'недели', 'недель')}` : '';
+  return `за неделю в среднем ${Math.round(avg(arr))} ккал/день`;
+}
+
+function addMeal(item) {
+  const d = { ...getDay(state.date) };
+  d.meals = [...(d.meals || []), { id: uid(), n: item.n, k: Math.round(item.k) || 0, p: Math.round(item.p) || 0 }];
+  saveDay(d);
+  toast(`+ ${item.k} ккал`);
+  renderFood();
+}
+
+function removeMeal(id) {
+  const d = { ...getDay(state.date) };
+  d.meals = (d.meals || []).filter(m => m.id !== id);
+  if (!d.meals.length) delete d.meals;
+  saveDay(d);
+  renderFood();
+}
+
+async function saveMyFoods() {
+  await DB.setMeta('myFoods', state.myFoods);
+}
+
+function rememberFood(item) {
+  const same = state.myFoods.find(f => f.n.toLowerCase() === item.n.toLowerCase());
+  if (same) { same.k = item.k; same.p = item.p; }
+  else state.myFoods.push({ id: uid(), n: item.n, k: Math.round(item.k), p: Math.round(item.p) || 0, uses: 0 });
+  saveMyFoods();
+}
+
+function openMealDlg() {
+  $('#mName').value = ''; $('#mKcal').value = ''; $('#mProt').value = '';
+  $('#mRemember').checked = true;
+  $('#mealDlg').showModal();
+  setTimeout(() => $('#mName').focus(), 50);
+}
+
+function saveMealDlg() {
+  const n = $('#mName').value.trim();
+  const k = +$('#mKcal').value;
+  const p = +$('#mProt').value || 0;
+  if (!n) { toast('Напиши, что съел'); return; }
+  if (!k || k < 0 || k > 5000) { toast('Укажи калории'); return; }
+  const item = { n, k, p };
+  if ($('#mRemember').checked) rememberFood(item);
+  $('#mealDlg').close();
+  addMeal(item);
+}
+
+/* --- Профиль / норма --- */
+
+function segVal(id) { const b = $(`#${id} .on`); return b ? b.dataset.v : null; }
+function setSeg(id, v) { $$(`#${id} button`).forEach(b => b.classList.toggle('on', b.dataset.v === String(v))); }
+const numIn = id => { const v = parseFloat(($(`#${id}`).value || '').replace(',', '.')); return isNaN(v) ? null : v; };
+
+function readProfileForm() {
+  return {
+    sex: segVal('pfSex') || 'm',
+    age: numIn('pfAge'), height: numIn('pfHeight'),
+    weight: numIn('pfWeight'), goal: numIn('pfGoal'),
+    act: +(segVal('pfAct') ?? 1), pace: +(segVal('pfPace') ?? 0.5),
+  };
+}
+
+function openProfile() {
+  const pf = state.profile || {};
+  const w = currentWeight(todayKey());
+  setSeg('pfSex', pf.sex || 'm'); setSeg('pfAct', pf.act ?? 1); setSeg('pfPace', pf.pace ?? 0.5);
+  $('#pfAge').value = pf.age ?? ''; $('#pfHeight').value = pf.height ?? '';
+  $('#pfWeight').value = w != null ? num(w) : ''; $('#pfGoal').value = pf.goal != null ? num(pf.goal) : '';
+  updateProfileCalc();
+  $('#profileDlg').showModal();
+}
+
+function updateProfileCalc() {
+  const f = readProfileForm();
+  $('#pfResult').innerHTML = normText(calcNorm(f, f.weight));
+}
+
+async function saveProfile() {
+  const f = readProfileForm();
+  if (!f.age || !f.height || !f.weight) { toast('Нужны возраст, рост и вес'); return; }
+  if (f.age < 14 || f.age > 90 || f.height < 120 || f.height > 230 || f.weight < 30 || f.weight > 250) { toast('Проверь цифры'); return; }
+  state.profile = f;
+  await DB.setMeta('profile', f);
+  // Вес из формы записываем в сегодняшний день, если сегодня его ещё нет
+  const t = getDay(todayKey());
+  if (t.weight == null) await saveDay({ ...t, weight: clampRound('weight', f.weight) });
+  $('#profileDlg').close();
+  toast('Норма сохранена');
+  renderAll();
+}
+
+function bindFood() {
+  $('#prevFDay').onclick = () => { state.date = addDays(state.date, -1); renderFood(); };
+  $('#nextFDay').onclick = () => { if (state.date < todayKey()) { state.date = addDays(state.date, 1); renderFood(); } };
+  $('#mealList').onclick = e => { const b = e.target.closest('[data-del]'); if (b) removeMeal(b.dataset.del); };
+  $('#myFoods').onclick = e => {
+    if (e.target.closest('#addMeal')) { openMealDlg(); return; }
+    const c = e.target.closest('[data-my]'); if (!c) return;
+    const f = state.myFoods.find(x => x.id === c.dataset.my); if (!f) return;
+    if (state.editFoods) {
+      state.myFoods = state.myFoods.filter(x => x !== f);
+      saveMyFoods(); if (!state.myFoods.length) state.editFoods = false;
+      renderFood(); return;
+    }
+    f.uses = (f.uses || 0) + 1; saveMyFoods();
+    addMeal(f);
+  };
+  $('#editMyFoods').onclick = () => { state.editFoods = !state.editFoods; renderFood(); };
+  $('#dishCats').onclick = e => { const c = e.target.closest('[data-cat]'); if (!c) return; state.dishCat = c.dataset.cat; state.openDish = null; renderFood(); };
+  $('#fitOnly').onchange = renderFood;
+  $('#dishList').onclick = e => {
+    const eat = e.target.closest('[data-eat]'), keep = e.target.closest('[data-keep]'), row = e.target.closest('[data-dish]');
+    if (eat) { const x = FOOD_BASE.find(f => f.id === eat.dataset.eat); state.openDish = null; addMeal(x); return; }
+    if (keep) { const x = FOOD_BASE.find(f => f.id === keep.dataset.keep); rememberFood(x); toast('Добавил в «Мои блюда»'); renderFood(); return; }
+    if (row) { state.openDish = state.openDish === row.dataset.dish ? null : row.dataset.dish; renderFood(); }
+  };
+  $('#mSave').onclick = saveMealDlg;
+  $('#mealForm').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveMealDlg(); } });
+  for (const id of ['pfSex', 'pfAct', 'pfPace']) {
+    $(`#${id}`).onclick = e => { const b = e.target.closest('button'); if (!b) return; setSeg(id, b.dataset.v); updateProfileCalc(); };
+  }
+  $('#profileForm').addEventListener('input', updateProfileCalc);
+  $('#pfSave').onclick = saveProfile;
+  for (const id of ['profileDlg', 'mealDlg']) $(`#${id}`).addEventListener('click', e => { if (e.target.id === id) $(`#${id}`).close(); });
+}
+
 /* ================= Хронология ================= */
 
 function renderTimeline() {
@@ -542,6 +783,15 @@ function renderTimeline() {
   charts.push(chartCard('Питание', f.length ? `${num(avg(f.map(p => p.y)))} / 10` : '', f.length ? 'в среднем' : '', 'var(--food)',
     f.length ? barChart(f, span, from, null, { min: 0, max: 10, colorFn: foodColor }) : null));
 
+  // Калории (только если записывал еду)
+  const kcPts = list.filter(d => d.meals && d.meals.length).map(d => ({ x: daysBetween(from, d.date), y: dayKcal(d) }));
+  if (kcPts.length) {
+    const norm = calcNorm(state.profile, currentWeight(today));
+    const mx = Math.max(norm ? norm.target * 1.3 : 0, ...kcPts.map(p => p.y));
+    charts.push(chartCard('Калории', `${Math.round(avg(kcPts.map(p => p.y)))}`, `в среднем за день${norm ? ` · норма ${norm.target}` : ''} · ${kcPts.length} ${plural(kcPts.length, 'день', 'дня', 'дней')} записано`, 'var(--food)',
+      barChart(kcPts, span, from, null, { min: 0, max: mx, ref: norm ? norm.target : null, colorFn: v => norm && v > norm.target ? 'var(--bp)' : 'var(--food)' })));
+  }
+
   // Давление
   const sys = pts('sys'), dia = pts('dia');
   charts.push(chartCard('Давление', sys.length ? `${sys[sys.length - 1].y}/${dia.length ? dia[dia.length - 1].y : '–'}` : '',
@@ -564,6 +814,7 @@ function renderTimeline() {
     const v = [];
     if (d.sleep != null) v.push(`<i style="--c:var(--sleep)">${num(d.sleep)} ч</i>`);
     if (d.food != null) v.push(`<i style="--c:${foodColor(d.food)}">еда ${d.food}</i>`);
+    if (d.meals && d.meals.length) v.push(`<i style="--c:var(--food)">${dayKcal(d)} ккал</i>`);
     if (d.weight != null) v.push(`<i style="--c:var(--weight)">${num(d.weight)} кг</i>`);
     if (d.sys != null) v.push(`<i style="--c:var(--bp)">${d.sys}/${d.dia ?? '–'}</i>`);
     if (d.workout && d.workout.length) v.push(`<i class="groups">🏋 ${d.workout.map(g => GROUP[g] ? GROUP[g].name : g).join(', ')}</i>`);
@@ -711,7 +962,7 @@ async function exportData() {
   toast('Готовлю копию…');
   const photos = [];
   for (const p of await DB.allPhotos()) photos.push({ id: p.id, date: p.date, data: await blobToDataUrl(p.blob) });
-  const payload = { app: 'DOAH', format: 2, exported: new Date().toISOString(), days: sortedDays(), photos };
+  const payload = { app: 'DOAH', format: 2, exported: new Date().toISOString(), days: sortedDays(), photos, profile: state.profile, myFoods: state.myFoods };
   const name = `doah-копия-${todayKey()}.json`;
   const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
   const file = new File([blob], name, { type: 'application/json' });
@@ -747,6 +998,12 @@ async function importData(file) {
       const blob = await (await fetch(p.data)).blob();
       await DB.putPhoto({ id: p.id, date: p.date, blob, thumb: await shrink(blob, 320, 0.7) });
     } catch (e) { console.error(e); }
+  }
+  if (data.profile && !state.profile) { state.profile = data.profile; await DB.setMeta('profile', data.profile); }
+  if (Array.isArray(data.myFoods)) {
+    const names = new Set(state.myFoods.map(f => f.n.toLowerCase()));
+    for (const f of data.myFoods) if (f && f.n && !names.has(f.n.toLowerCase())) state.myFoods.push(f);
+    await DB.setMeta('myFoods', state.myFoods);
   }
   for (const d of valid) {
     const cur = days.get(d.date);
@@ -794,6 +1051,7 @@ function renderAll() {
   if (state.view === 'timeline') renderTimeline();
   if (state.view === 'workouts') renderWorkouts();
   if (state.view === 'diary') renderDiary();
+  if (state.view === 'food') renderFood();
 }
 
 function openDayNote(e) {
@@ -803,6 +1061,7 @@ function openDayNote(e) {
 }
 
 function bind() {
+  bindFood();
   $$('.tabs button').forEach(b => b.onclick = () => {
     if (b.dataset.view === 'today' && state.view === 'today') state.date = todayKey();
     show(b.dataset.view);
@@ -925,6 +1184,8 @@ async function init() {
     await DB.open();
     for (const d of await DB.all()) days.set(d.date, d);
     state.lastExport = await DB.getMeta('lastExport') || null;
+    state.profile = await DB.getMeta('profile') || null;
+    state.myFoods = await DB.getMeta('myFoods') || [];
   } catch (e) {
     toast('Не удалось открыть хранилище');
     console.error(e);
