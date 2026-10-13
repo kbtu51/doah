@@ -931,6 +931,27 @@ async function init() {
   }
   renderAll();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  setupInstall();
+}
+
+/* Своя кнопка «Установить» — Chrome сам присылает событие, когда установка возможна */
+function setupInstall() {
+  let promptEvent = null;
+  const box = $('#installBox');
+  const standalone = () => matchMedia('(display-mode: standalone)').matches;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    promptEvent = e;
+    if (!standalone()) box.hidden = false;
+  });
+  $('#installBtn').onclick = async () => {
+    if (!promptEvent) return;
+    promptEvent.prompt();
+    await promptEvent.userChoice.catch(() => {});
+    promptEvent = null;
+    box.hidden = true;
+  };
+  window.addEventListener('appinstalled', () => { box.hidden = true; toast('DOAH установлен — открывай с главного экрана'); });
 }
 
 init();
