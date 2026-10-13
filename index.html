@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>DOAH</title>
+  <meta name="description" content="DOAH — Diary of a Health. Сон, питание, тренировки, вес, давление.">
+  <meta name="theme-color" content="#0e1014">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">DOAH</div>
+    <button class="icon-btn" id="openSettings" aria-label="Настройки">
+      <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- СЕГОДНЯ -->
+    <section class="view" id="view-today">
+      <div class="daynav">
+        <button class="icon-btn" id="prevDay" aria-label="Предыдущий день"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <div class="daynav-title">
+          <div id="dayTitle">Сегодня</div>
+          <div class="muted small" id="daySub"></div>
+        </div>
+        <button class="icon-btn" id="nextDay" aria-label="Следующий день"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+
+      <div class="progress" id="progress"><span></span><span></span><span></span><span></span></div>
+      <div id="backupNag"></div>
+
+      <article class="card" data-metric="sleep">
+        <div class="card-head"><h2>Сон</h2><span class="hint" id="sleepHint"></span></div>
+        <div class="stepper">
+          <button class="step" data-field="sleep" data-delta="-0.5" aria-label="Меньше">−</button>
+          <button class="value" id="sleepValue" data-field="sleep"></button>
+          <button class="step" data-field="sleep" data-delta="0.5" aria-label="Больше">+</button>
+        </div>
+      </article>
+
+      <article class="card" data-metric="food">
+        <div class="card-head"><h2>Питание</h2><span class="hint" id="foodHint">насколько чисто ел</span></div>
+        <div class="scale" id="foodScale"></div>
+      </article>
+
+      <article class="card" data-metric="workout">
+        <div class="card-head"><h2>Тренировка</h2><span class="hint" id="workoutHint"></span></div>
+        <div class="chips" id="workoutChips"></div>
+      </article>
+
+      <article class="card" data-metric="weight">
+        <div class="card-head"><h2>Вес</h2><span class="hint" id="weightHint"></span></div>
+        <div class="stepper">
+          <button class="step" data-field="weight" data-delta="-0.1" aria-label="Меньше">−</button>
+          <button class="value" id="weightValue" data-field="weight"></button>
+          <button class="step" data-field="weight" data-delta="0.1" aria-label="Больше">+</button>
+        </div>
+      </article>
+
+      <article class="card" data-metric="bp">
+        <div class="card-head"><h2>Давление <span class="muted small">необязательно</span></h2><span class="hint" id="bpHint"></span></div>
+        <div class="bp">
+          <input id="bpSys" type="number" inputmode="numeric" placeholder="120" min="60" max="250" aria-label="Верхнее">
+          <span class="bp-slash">/</span>
+          <input id="bpDia" type="number" inputmode="numeric" placeholder="80" min="30" max="160" aria-label="Нижнее">
+          <span class="muted small">мм рт. ст.</span>
+        </div>
+      </article>
+
+      <article class="card" data-metric="note">
+        <div class="card-head"><h2>Дневник <span class="muted small">необязательно</span></h2><span class="hint" id="noteHint"></span></div>
+        <textarea id="noteText" rows="2" placeholder="Чем занимался, что запомнилось…"></textarea>
+        <div class="photos" id="notePhotos"></div>
+        <input type="file" id="photoInput" accept="image/*" multiple hidden>
+      </article>
+
+      <p class="saved muted small" id="savedNote">Всё сохраняется само</p>
+    </section>
+
+    <!-- ДНЕВНИК -->
+    <section class="view" id="view-diary" hidden>
+      <div class="daynav">
+        <button class="icon-btn" id="prevDMonth" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <div class="daynav-title"><div id="dMonthTitle"></div><div class="muted small" id="dMonthSub"></div></div>
+        <button class="icon-btn" id="nextDMonth" aria-label="Следующий месяц"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <input type="search" id="diarySearch" class="search" placeholder="Поиск по дневнику">
+      <div id="memory"></div>
+      <div id="diaryList"></div>
+    </section>
+
+    <!-- ХРОНОЛОГИЯ -->
+    <section class="view" id="view-timeline" hidden>
+      <div class="segmented" id="rangeSeg">
+        <button data-range="30" class="on">30 дней</button>
+        <button data-range="90">90 дней</button>
+        <button data-range="365">Год</button>
+        <button data-range="0">Всё</button>
+      </div>
+      <div id="charts"></div>
+      <h3 class="section-title">Дни</h3>
+      <div id="feed"></div>
+    </section>
+
+    <!-- ТРЕНИРОВКИ -->
+    <section class="view" id="view-workouts" hidden>
+      <div class="daynav">
+        <button class="icon-btn" id="prevMonth" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <div class="daynav-title"><div id="monthTitle"></div><div class="muted small" id="monthSub"></div></div>
+        <button class="icon-btn" id="nextMonth" aria-label="Следующий месяц"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <div class="cal" id="calendar"></div>
+      <div id="calDetail"></div>
+      <h3 class="section-title">Давно не качал</h3>
+      <div id="groupStats"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-view="today" class="on">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="m9 15 2 2 4-4"/></svg>
+      <span>Сегодня</span>
+    </button>
+    <button data-view="diary">
+      <svg viewBox="0 0 24 24"><path d="M5 4a2 2 0 0 1 2-2h12v18H7a2 2 0 0 0-2 2V4Z"/><path d="M5 20a2 2 0 0 1 2-2h12M9 7h6M9 11h4"/></svg>
+      <span>Дневник</span>
+    </button>
+    <button data-view="timeline">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-7"/></svg>
+      <span>Хронология</span>
+    </button>
+    <button data-view="workouts">
+      <svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11"/></svg>
+      <span>Тренировки</span>
+    </button>
+  </nav>
+
+  <dialog id="settings">
+    <form method="dialog" class="sheet">
+      <div class="card-head"><h2>Данные</h2><button class="icon-btn" value="close" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <p class="muted small">Всё хранится только на этом телефоне. Делай копию раз в неделю — если удалить приложение или почистить браузер, данные пропадут.</p>
+      <p class="small" id="dataInfo"></p>
+      <button type="button" class="btn primary" id="exportBtn">Сохранить копию</button>
+      <label class="btn">Восстановить из копии<input type="file" id="importFile" accept="application/json,.json" hidden></label>
+      <p class="muted small" id="persistInfo"></p>
+      <p class="muted small">DOAH — Diary of a Health · v0.2</p>
+    </form>
+  </dialog>
+
+  <dialog id="photoView" class="photo-view">
+    <img id="photoImg" alt="Фото дня">
+    <div class="pv-bar">
+      <button class="btn" id="pvDelete">Удалить</button>
+      <button class="btn" id="pvClose">Закрыть</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
